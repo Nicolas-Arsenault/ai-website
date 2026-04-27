@@ -1,108 +1,67 @@
 import {
   BellRing,
-  Braces,
   CheckCircle2,
   CircleDollarSign,
   Clock3,
-  Database,
-  KeyRound,
-  LockKeyhole,
   WalletCards,
-  Webhook,
 } from "lucide-react";
-import { FormEvent, ReactNode, useState } from "react";
+import { FormEvent, useState } from "react";
 import meterlaneLogo from "../assets/meterlane.png";
 import { supabase } from "./lib/supabase";
 
-const createRunCode = `import { Meterlane } from "@meterlane/sdk";
-
-const meterlane = new Meterlane({
-  apiKey: process.env.METERLANE_API_KEY
-});
-
-const run = await meterlane.runs.create({
+const miniSdkCode = `await meterlane.runs.create({
   customerId: user.id,
   feature: "document_summary",
-  provider: "openai",
-  model: "gpt-5.2",
   creditCost: 5,
-  input: {
-    text: documentText
-  }
-});
-
-return Response.json({
-  runId: run.id,
-  status: run.status
+  billing: "stripe",
+  webhook: "/api/meterlane"
 });`;
-
-const accessCode = `const access = await meterlane.features.canRun({
-  customerId: user.id,
-  feature: "document_summary",
-  estimatedUnits: 5
-});
-
-if (!access.allowed) {
-  return Response.json({ reason: access.reason }, { status: 403 });
-}`;
-
-const webhookCode = `const event = await meterlane.webhooks.verify({
-  body: rawBody,
-  headers: request.headers
-});
-
-if (event.type === "run.completed") {
-  await markDocumentReady(event.data.runId);
-}`;
 
 const capabilityCards = [
   {
     icon: WalletCards,
-    title: "AI credit system",
-    pain: "How do users or orgs get credits for AI features?",
-    body: "Grant monthly credits, sell credit packs, add manual adjustments, and deduct credits when features run.",
-  },
-  {
-    icon: CircleDollarSign,
-    title: "Credit ledger",
-    pain: "How do you avoid charging twice when jobs retry?",
-    body: "Reserve credits before a run, commit on success, and void or refund when jobs fail.",
+    title: "Credits and ledgers",
+    pain: "AI users should not cost more than they pay.",
+    body: "Grant monthly credits, sell credit packs, reserve before runs, commit on success, and void failed jobs.",
   },
   {
     icon: Clock3,
-    title: "Hosted AI runs",
-    pain: "What happens after the request ends?",
-    body: "Queue and run model jobs, return a run_id, and expose queued, running, completed, failed, and cancelled states.",
-  },
-  {
-    icon: LockKeyhole,
-    title: "Usage limits",
-    pain: "Can this user run this AI feature right now?",
-    body: "Set limits by user, team, org, feature, plan, or time period before expensive model calls happen.",
+    title: "Hosted runs and retries",
+    pain: "Long model jobs need durable status.",
+    body: "Queue AI work, return a run_id, track status, retry temporary failures, and avoid double-charging.",
   },
   {
     icon: BellRing,
-    title: "Retries and webhooks",
-    pain: "How does the app know when AI work finishes or fails?",
-    body: "Retry temporary provider errors, cancel jobs, and send signed completion, failure, and alert events.",
+    title: "Limits and webhooks",
+    pain: "Block abuse before the provider call starts.",
+    body: "Set limits by customer, plan, feature, or period, then send signed completion and low-credit events.",
   },
   {
-    icon: Webhook,
-    title: "Stripe billing sync",
-    pain: "How do payments become usable AI credits?",
-    body: "Connect subscriptions to credit grants, issue monthly credits on paid invoices, and support credit packs.",
+    icon: CircleDollarSign,
+    title: "Stripe and provider keys",
+    pain: "Payments need to become usable AI capacity.",
+    body: "Sync Stripe subscriptions and credit packs while customers bring encrypted OpenAI or Anthropic keys.",
+  },
+];
+
+const painQuotes = [
+  {
+    quote: "one of my AI features wasn't working",
+    context: "OpenAI credits expired and a customer noticed the product failure first.",
+    source: "Reddit / r/SaaS",
+    href: "https://www.reddit.com/r/SaaS/comments/1l2jxmj",
   },
   {
-    icon: Database,
-    title: "Usage dashboard",
-    pain: "Which customers, features, and models are driving usage?",
-    body: "View balances, runs, failed jobs, usage, model cost estimates, Stripe sync status, and webhook replays.",
+    quote: "usage limits weren't tracked",
+    context: "A founder validating pain around surprise API bills and downtime.",
+    source: "Reddit / r/SaaS",
+    href: "https://www.reddit.com/r/SaaS/comments/1qlof61/anyone_here_burned_by_surprise_api_overages/",
   },
   {
-    icon: KeyRound,
-    title: "Provider key management",
-    pain: "How do teams keep control of model providers?",
-    body: "Customers bring encrypted OpenAI or Anthropic keys and still pay providers directly.",
+    quote: "it feels like reinventing the wheel",
+    context: "A SaaS builder asking how others handle credits, tiers, and Stripe status.",
+    source: "Reddit / r/SaaS",
+    href: "https://www.reddit.com/r/SaaS/comments/1f932ml",
   },
 ];
 
@@ -124,10 +83,8 @@ function App() {
       <Header />
       <main>
         <Hero />
+        <PainQuotes />
         <CapabilityPreview />
-        <HowItWorks />
-        <NotAWrapper />
-        <SDKPreview />
       </main>
     </>
   );
@@ -142,8 +99,8 @@ function Header() {
           <span>Meterlane</span>
         </a>
         <div className="nav-links">
+          <a href="#proof">Proof</a>
           <a href="#features">Features</a>
-          <a href="#sdk">SDK</a>
           <a href="#waitlist">Waitlist</a>
         </div>
         <a className="nav-cta" href="#waitlist">Join waitlist &gt;</a>
@@ -155,6 +112,7 @@ function Header() {
 function Hero() {
   return (
     <section className="hero section" id="waitlist">
+      <img className="hero-watermark" src={meterlaneLogo} alt="" aria-hidden="true" />
       <div className="site-shell hero-grid">
         <div className="hero-copy">
           <p className="eyebrow">Meterlane</p>
@@ -177,104 +135,55 @@ function Hero() {
   );
 }
 
+function PainQuotes() {
+  return (
+    <section className="section pain-section" id="proof" aria-labelledby="pain-title">
+      <div className="site-shell">
+        <div className="pain-header">
+          <p className="eyebrow">Market signal</p>
+          <h2 id="pain-title">The pain is already public.</h2>
+          <p>
+            Builders are duct-taping credits, usage limits, provider failures,
+            and Stripe state together before they can ship AI features safely.
+          </p>
+        </div>
+        <div className="quote-grid">
+          {painQuotes.map((item) => (
+            <a className="quote-card" href={item.href} target="_blank" rel="noreferrer" key={item.quote}>
+              <span className="quote-source">{item.source}</span>
+              <blockquote>“{item.quote}”</blockquote>
+              <p>{item.context}</p>
+            </a>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function CapabilityPreview() {
   return (
     <section className="section" id="features">
       <div className="site-shell">
         <SectionHeader
           eyebrow="What it handles"
-          title="The backend around your AI features."
-          body="Model APIs generate outputs. Meterlane handles the credits, limits, runs, billing sync, webhooks, and provider keys around those AI features."
+          title="The backend layer paid AI features need."
+          body="Meterlane sits around your model calls: credits, limits, durable runs, billing sync, webhooks, and customer provider keys."
         />
-        <div className="capability-grid">
-          {capabilityCards.map(({ icon: Icon, title, pain, body }) => (
-            <article className="capability-card" key={title}>
-              <span className="icon-box"><Icon size={20} /></span>
-              <h3>{title}</h3>
-              <p className="pain-line">{pain}</p>
-              <p>{body}</p>
-            </article>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function HowItWorks() {
-  const steps = [
-    ["Check credits and limits", "Confirm the customer can run this feature before expensive inference starts."],
-    ["Reserve credits and create a run", "Store the request, customer, feature, model, and idempotency key."],
-    ["Execute the model job", "Use the customer's encrypted OpenAI or Anthropic key, then retry temporary failures."],
-    ["Commit usage and notify your app", "Commit or void credits, update status, sync billing state, and send signed webhooks."],
-  ];
-
-  return (
-    <section className="section section-band">
-      <div className="site-shell">
-        <SectionHeader
-          eyebrow="Flow"
-          title="One run lifecycle for every AI feature."
-          body="Meterlane turns a model call into a durable product workflow with credit reservations, limits, retries, billing sync, status, and webhooks."
-        />
-        <div className="steps">
-          {steps.map(([title, body], index) => (
-            <article className="step-card" key={title}>
-              <span className="step-number">{String(index + 1).padStart(2, "0")}</span>
-              <h3>{title}</h3>
-              <p>{body}</p>
-            </article>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function NotAWrapper() {
-  return (
-    <section className="section section-band">
-      <div className="site-shell comparison">
-        <div>
-          <p className="eyebrow">Not a model wrapper</p>
-          <h2>Meterlane is the backend around your AI features.</h2>
-          <p>
-            OpenAI and Claude handle inference. Meterlane handles the product
-            backend around that inference: credits, ledgers, run records, status,
-            retries, limits, billing sync, webhooks, and provider keys. You still
-            choose the provider, model, prompt, and product experience.
-          </p>
-        </div>
-        <div className="comparison-grid" aria-label="OpenAI and Claude compared with Meterlane">
-          <ComparisonCard
-            icon={<Braces size={22} />}
-            title="Model providers"
-            items={["Inference APIs", "Model selection", "Token billing", "Provider dashboards"]}
-          />
-          <ComparisonCard
-            icon={<Database size={22} />}
-            title="Meterlane"
-            items={["Credit ledgers", "Hosted run lifecycle", "Limits and retries", "Stripe sync and webhooks"]}
-          />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function SDKPreview() {
-  return (
-    <section className="section" id="sdk">
-      <div className="site-shell">
-        <SectionHeader
-          eyebrow="SDK preview"
-          title="Small API surface for AI feature backends."
-          body="The SDK preview is illustrative for validation, but the intended shape is direct: create runs, check credits and limits, and verify webhooks."
-        />
-        <div className="sdk-grid">
-          <CodePanel title="Create a run" language="TypeScript" code={createRunCode} compact />
-          <CodePanel title="Check feature access" language="TypeScript" code={accessCode} compact />
-          <CodePanel title="Verify a webhook" language="TypeScript" code={webhookCode} compact />
+        <div className="feature-preview">
+          <div className="capability-grid">
+            {capabilityCards.map(({ icon: Icon, title, pain, body }) => (
+              <article className="capability-card" key={title}>
+                <span className="icon-box"><Icon size={20} /></span>
+                <h3>{title}</h3>
+                <p className="pain-line">{pain}</p>
+                <p>{body}</p>
+              </article>
+            ))}
+          </div>
+          <div className="mini-sdk">
+            <CodePanel title="Create a metered run" language="TypeScript" code={miniSdkCode} compact />
+          </div>
         </div>
       </div>
     </section>
@@ -412,18 +321,6 @@ function CodePanel({ title, language, code, compact = false }: { title: string; 
       </figcaption>
       <pre><code>{code}</code></pre>
     </figure>
-  );
-}
-
-function ComparisonCard({ icon, title, items }: { icon: ReactNode; title: string; items: string[] }) {
-  return (
-    <article className="comparison-card">
-      <span className="icon-box">{icon}</span>
-      <h3>{title}</h3>
-      <ul>
-        {items.map((item) => <li key={item}>{item}</li>)}
-      </ul>
-    </article>
   );
 }
 
