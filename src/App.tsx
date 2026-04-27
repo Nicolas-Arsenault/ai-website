@@ -159,6 +159,7 @@ function Hero() {
         <div className="hero-copy">
           <p className="eyebrow">Meterlane</p>
           <h1>Backend for AI features</h1>
+          <p className="hero-kicker">Stop rebuilding the backend around every AI feature.</p>
           <p className="hero-subheadline">
             Hosted AI runs, credit ledgers, usage limits, webhooks, provider key
             management, and Stripe billing sync for apps built on OpenAI,
